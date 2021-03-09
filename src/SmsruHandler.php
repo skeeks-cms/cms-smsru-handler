@@ -8,6 +8,7 @@
 
 namespace skeeks\cms\sms\smsru;
 
+use skeeks\cms\models\CmsSmsMessage;
 use skeeks\cms\sms\SmsHandler;
 use skeeks\yii2\form\fields\FieldSet;
 use yii\base\Exception;
@@ -91,45 +92,48 @@ class SmsruHandler extends SmsHandler
     public function send($phone, $text, $sender = null)
     {
         $queryString = http_build_query([
-            'user'    => $this->login,
-            'pass'    => $this->password,
-            'or_id'   => $this->sender,
-            'phone'   => $phone,
-            'message' => $text,
+            'api_id'    => $this->api_key,
+            'to'    => $phone,
+            'msg'   => $text,
+            'json'   => 1,
         ]);
 
-        $url = 'https://smsimple.ru/http_send.php?'.$queryString;
-
-
-        $stream_opts = [
-            "ssl" => [
-                "verify_peer"      => false,
-                "verify_peer_name" => false,
-            ],
-        ];
-
-        print_r($url);
-        die;
-        $response = file_get_contents($url, false, stream_context_create($stream_opts));
-        return $response;
+        $url = 'https://sms.ru/sms/send?'.$queryString;
 
         $client = new Client();
-        $response = $client->createRequest()
-            ->setMethod('GET')
+        $response = $client
+            ->createRequest()
+            ->setFormat(Client::FORMAT_JSON)
             ->setUrl($url)
-            ->setOptions([
-                "ssl" => [
-                    "verify_peer"      => false,
-                    "verify_peer_name" => false,
-                ],
-            ])
             ->send();
 
         if (!$response->isOk) {
             throw new Exception($response->content);
         }
 
-        return $response->content;
+        return $response->data;
+    }
+
+    public function sendMessage(CmsSmsMessage $cmsSmsMessage)
+    {
+        $data = $this->send($cmsSmsMessage->phone, $cmsSmsMessage->message);
+        if (ArrayHelper::getValue($data, 'status') == "ERROR") {
+            $cmsSmsMessage->status = CmsSmsMessage::STATUS_ERROR;
+            $cmsSmsMessage->provider_status = (string) ArrayHelper::getValue($data, 'status');
+            $cmsSmsMessage->error_message = ArrayHelper::getValue($data, 'status_text');
+            return;
+        }
+
+        $status = ArrayHelper::getValue($data, ['sms', $cmsSmsMessage->phone, 'status']);
+        if ($status == "OK") {
+            $cmsSmsMessage->status = CmsSmsMessage::STATUS_DELIVERED;
+            $cmsSmsMessage->provider_status = (string) ArrayHelper::getValue($data, ['sms', $cmsSmsMessage->phone, 'status_code']);
+            $cmsSmsMessage->provider_message_id = ArrayHelper::getValue($data, ['sms', $cmsSmsMessage->phone, 'sms_id']);
+        } else {
+            $cmsSmsMessage->status = CmsSmsMessage::STATUS_ERROR;
+            $cmsSmsMessage->provider_status = (string) ArrayHelper::getValue($data, ['sms', $cmsSmsMessage->phone, 'status_code']);
+            $cmsSmsMessage->error_message = ArrayHelper::getValue($data, ['sms', $cmsSmsMessage->phone, 'status_text']);
+        }
     }
 
     /**
