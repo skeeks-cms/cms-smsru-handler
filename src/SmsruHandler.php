@@ -96,6 +96,7 @@ class SmsruHandler extends SmsHandler
             'to'    => $phone,
             'msg'   => $text,
             'json'   => 1,
+            'partner_id'   => 145700,
         ]);
 
         $url = 'https://sms.ru/sms/send?'.$queryString;
