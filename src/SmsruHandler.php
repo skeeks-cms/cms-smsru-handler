@@ -32,7 +32,7 @@ class SmsruHandler extends SmsHandler
     static public function descriptorConfig()
     {
         return array_merge(parent::descriptorConfig(), [
-            'name' => \Yii::t('skeeks/shop/app', 'sms.ru'),
+            'name' => "sms.ru",
         ]);
     }
 
